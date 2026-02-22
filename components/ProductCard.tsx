@@ -6,7 +6,18 @@ import { assets } from "@/assets/assets";
 import Image from "next/image";
 import { useAppContext } from "@/context/AppContext";
 
-const ProductCard = ({ product }) => {
+type ProductCardProps = {
+  product: {
+    _id: string;
+    name: string;
+    description?: string;
+    offerPrice?: number;
+    image: string[];
+  } & Record<string, any>;
+  isLcp?: boolean;
+};
+
+const ProductCard = ({ product, isLcp = false }: ProductCardProps) => {
   const { currency, router } = useAppContext();
 
   return (
@@ -24,7 +35,8 @@ const ProductCard = ({ product }) => {
           className="group-hover:scale-105 transition object-cover w-4/5 h-4/5 md:w-full md:h-full"
           width={800}
           height={800}
-          loading="lazy"
+          loading={isLcp ? "eager" : "lazy"}
+          priority={isLcp}
           sizes="(max-width: 768px) 45vw, (max-width: 1024px) 25vw, 200px"
         />
         <button

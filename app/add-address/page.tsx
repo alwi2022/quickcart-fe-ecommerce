@@ -8,6 +8,28 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { MapPin } from "lucide-react"; // di atas file
 
+type AddressForm = {
+    labelKey: string;
+    labelName: string;
+    fullName: string;
+    phoneNumber: string;
+    province: string;
+    city: string;
+    district: string;
+    subdistrict: string;
+    postalCode: string;
+    addressLine: string;
+    note: string;
+    isDefault: boolean;
+    lat: number | null;
+    lng: number | null;
+};
+
+type AddressBookItem = AddressForm & {
+    id: string;
+    label: string;
+};
+
 
 const LABELS = [
     { key: "home", text: "Rumah" },
@@ -18,7 +40,7 @@ const LABELS = [
 export default function AddAddress() {
     const router = useRouter();
 
-    const [address, setAddress] = useState({
+    const [address, setAddress] = useState<AddressForm>({
         labelKey: "home",
         labelName: "",
         fullName: "",
@@ -35,11 +57,16 @@ export default function AddAddress() {
         lng: null,          // ← baru
     });
 
-    const [errors, setErrors] = useState({});
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     const [locLoading, setLocLoading] = useState(false);
 
-    const set = (k, v) => {
+    const set = (
+        k: keyof AddressForm,
+        v:
+            | AddressForm[keyof AddressForm]
+            | ((curr: AddressForm[keyof AddressForm], prev: AddressForm) => AddressForm[keyof AddressForm])
+    ) => {
         if (typeof v === "function") {
             setAddress(prev => ({ ...prev, [k]: v(prev[k], prev) }));
         } else {
@@ -48,7 +75,7 @@ export default function AddAddress() {
     };
 
     // Optional: tarik alamat dari koordinat (OpenStreetMap Nominatim).
-    async function reverseGeocode(lat, lng) {
+    async function reverseGeocode(lat: number, lng: number) {
         try {
             const res = await fetch(
                 `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
@@ -92,15 +119,15 @@ export default function AddAddress() {
 
 
     // tampilkan 3 alamat terbaru dari sessionStorage
-    const [recent, setRecent] = useState([]);
+    const [recent, setRecent] = useState<AddressBookItem[]>([]);
     useEffect(() => {
         try {
-            const book = JSON.parse(sessionStorage.getItem("addressBook") || "[]");
+            const book = JSON.parse(sessionStorage.getItem("addressBook") || "[]") as AddressBookItem[];
             setRecent(book.slice(0, 3));
         } catch { }
     }, []);
 
-    function applySaved(a) {
+    function applySaved(a: AddressBookItem) {
         setAddress(s => ({
             ...s,
             ...a,
@@ -118,7 +145,7 @@ export default function AddAddress() {
     }, [address.labelKey, address.labelName]);
 
     const validate = () => {
-        const e = {};
+        const e: Record<string, string> = {};
         if (!address.fullName.trim()) e.fullName = "Nama penerima wajib diisi";
         if (!address.phoneNumber.trim()) e.phoneNumber = "Nomor telepon wajib diisi";
         if (!address.province.trim()) e.province = "Provinsi wajib diisi";
@@ -145,7 +172,7 @@ export default function AddAddress() {
 
         // simpan ke buku alamat lokal
         try {
-            const book = JSON.parse(sessionStorage.getItem("addressBook") || "[]");
+            const book = JSON.parse(sessionStorage.getItem("addressBook") || "[]") as AddressBookItem[];
             const nextBook = [entry, ...book];
             sessionStorage.setItem("addressBook", JSON.stringify(nextBook));
         } catch { }

@@ -15,7 +15,13 @@ const BRANDS = [
   { name: "HP", value: "HP", logo: assets.hp_logo },
 ];
 
-function BrandCard({ name, logo, value }) {
+type BrandCardProps = {
+  name: string;
+  logo?: any;
+  value?: string;
+};
+
+function BrandCard({ name, logo, value }: BrandCardProps) {
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 3).toUpperCase();
   return (
     <Link

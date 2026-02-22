@@ -9,6 +9,8 @@ import {
   useCallback,
   useRef,
   memo,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -19,6 +21,28 @@ import { useAppContext } from "@/context/AppContext";
 import { useSearchParams } from "next/navigation";
 
 const PAGE_SIZE = 20; // batch 20 item
+
+type FilterPanelProps = {
+  categories: string[];
+  categoryCounts: Map<string, number>;
+  brands: string[];
+  priceBounds: { min: number; max: number };
+  minDraft: string;
+  setMinDraft: Dispatch<SetStateAction<string>>;
+  maxDraft: string;
+  setMaxDraft: Dispatch<SetStateAction<string>>;
+  setMinPrice: Dispatch<SetStateAction<number>>;
+  setMaxPrice: Dispatch<SetStateAction<number>>;
+  selectedCats: Set<string>;
+  setSelectedCats: Dispatch<SetStateAction<Set<string>>>;
+  selectedBrands: Set<string>;
+  setSelectedBrands: Dispatch<SetStateAction<Set<string>>>;
+  minRating: number;
+  setMinRating: Dispatch<SetStateAction<number>>;
+  resetAll: () => void;
+  isMobile?: boolean;
+  onClose?: () => void;
+};
 
 export default function AllProducts() {
   const { products = [] } = useAppContext();
@@ -61,8 +85,8 @@ export default function AllProducts() {
 
   /* ---------- State Filter ---------- */
   const [panelMobileOpen, setPanelMobileOpen] = useState(false);
-  const [selectedCats, setSelectedCats] = useState(new Set());
-  const [selectedBrands, setSelectedBrands] = useState(new Set());
+  const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
+  const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set());
   const [minPrice, setMinPrice] = useState(priceBounds.min);
   const [maxPrice, setMaxPrice] = useState(priceBounds.max);
   const [minRating, setMinRating] = useState(0);
@@ -334,9 +358,9 @@ function FilterPanel({
   resetAll,
   isMobile = false,
   onClose,
-}) {
+}: FilterPanelProps) {
   // toggle Set util
-  const toggleSet = useCallback((setVal, v) => {
+  const toggleSet = useCallback((setVal: Set<string>, v: string) => {
     const s = new Set(setVal);
     s.has(v) ? s.delete(v) : s.add(v);
     return s;

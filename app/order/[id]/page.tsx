@@ -32,7 +32,7 @@ export default function OrderDetailPage() {
       try {
         const data = Array.isArray(orderDummyData) ? orderDummyData : [];
         const found =
-          data.find((o) => String(o?.id) === String(id)) ??
+          data.find((o) => String((o as any)?._id ?? (o as any)?.id) === String(id)) ??
           // fallback: jika sebelumnya pakai index sebagai idKey
           data[Number(id)];
         if (alive) setOrder(found || null);
@@ -69,7 +69,7 @@ export default function OrderDetailPage() {
         {/* HEADER tanpa tombol-tombol */}
         <header className="mb-6">
           <h1 className="text-2xl md:text-3xl font-semibold text-zinc-900">
-            Detail Pesanan #{order.id}
+            Detail Pesanan #{order._id ?? order.id}
           </h1>
           <p className="mt-1 text-sm text-zinc-600">
             Status: <span className="font-medium text-zinc-900">{order.status ?? "Menunggu"}</span> •

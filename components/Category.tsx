@@ -6,8 +6,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { assets } from "@/assets/assets";
 
+type CategoryItem = {
+  id: string;
+  name: string;
+  icon: any;
+  value?: string;
+};
+
 /** Data default (boleh di-override via props) */
-const ELECTRO_CATEGORIES = [
+const ELECTRO_CATEGORIES: CategoryItem[] = [
   { id: "headphone",  name: "Headphone",     icon: assets.bose_headphone_image },
   { id: "earbuds",    name: "Earbuds",       icon: assets.sony_airbuds_image },
   { id: "earphone",   name: "Earphone",      icon: assets.apple_earphone_image },
@@ -23,7 +30,13 @@ const ELECTRO_CATEGORIES = [
 ];
 
 /** Item kategori: gunakan <Link> (aksesibilitas + SEO), img berukuran tetap (anti-CLS) */
-function CatItem({ href, name, icon }) {
+type CatItemProps = {
+  href: string;
+  name: string;
+  icon: any;
+};
+
+function CatItem({ href, name, icon }: CatItemProps) {
   return (
     <Link
       href={href}
@@ -53,11 +66,14 @@ function CatItem({ href, name, icon }) {
 export default function Category({
   title = "Kategori",
   categories = ELECTRO_CATEGORIES,
+}: {
+  title?: string;
+  categories?: CategoryItem[];
 }) {
-  const scrollRef = useRef(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   /** scrollBy di-memo agar tak bikin re-render */
-  const doScroll = useCallback((delta) => {
+  const doScroll = useCallback((delta: number) => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollBy({ left: delta, behavior: "smooth" });

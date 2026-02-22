@@ -420,7 +420,16 @@ export default function ProfilePage() {
 }
 
 /* ---------- Empty state ---------- */
-function EmptyState({ title, desc, cta }) {
+type EmptyStateProps = {
+  title: string;
+  desc?: string;
+  cta?: {
+    href: string;
+    label: string;
+  };
+};
+
+function EmptyState({ title, desc, cta }: EmptyStateProps) {
   return (
     <div className="grid place-items-center rounded-xl border border-dashed border-zinc-300 bg-white p-8 text-center">
       <Image src={assets.box_icon || assets.logo} alt="empty" width={56} height={56} className="opacity-70" />
