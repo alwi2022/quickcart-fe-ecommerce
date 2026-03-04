@@ -215,8 +215,20 @@ const Navbar = () => {
     return roles.includes("admin")
   }, [user?.roles, ctx?.roles]);
 
-  const cartCount = useMemo(() => ctx?.cart?.length ?? ctx?.cartItems?.length ?? ctx?.basket?.length ?? 0, [ctx?.cart, ctx?.cartItems, ctx?.basket]);
-  const wishCount = useMemo(() => ctx?.wishlist?.length ?? ctx?.favorites?.length ?? ctx?.saved?.length ?? 0, [ctx?.wishlist, ctx?.favorites, ctx?.saved]);
+  const cartCount = useMemo(() => {
+    if (typeof ctx?.getCartCount === "function") return ctx.getCartCount();
+
+    if (ctx?.cartItems && typeof ctx.cartItems === "object" && !Array.isArray(ctx.cartItems)) {
+      return Object.values(ctx.cartItems).reduce((sum, qty) => sum + Number(qty || 0), 0);
+    }
+
+    return ctx?.cart?.length ?? ctx?.basket?.length ?? 0;
+  }, [ctx]);
+
+  const wishCount = useMemo(() => {
+    const source = ctx?.wishlist ?? ctx?.favorites ?? ctx?.saved;
+    return Array.isArray(source) ? source.length : 0;
+  }, [ctx]);
 
   // Mobile search toggle
   const [showMobileSearch, setShowMobileSearch] = useState(false);

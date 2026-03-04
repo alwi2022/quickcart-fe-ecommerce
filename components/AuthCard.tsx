@@ -69,6 +69,10 @@ export default function AuthCard({ mode = "register" }) {
 
       toast.success("Berhasil memproses. Silakan cek email untuk verifikasi.");
 
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("quickcart-auth-changed"));
+      }
+
       // Redirect ke next (jika ada), fallback ke beranda / profile
       const next = sp.get("next"); // dari middleware (jika ada)
       const target = next && next.startsWith("/") ? next : "/profile"; // fallback ke /profile

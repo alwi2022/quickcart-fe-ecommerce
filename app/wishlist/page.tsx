@@ -11,6 +11,7 @@ import { assets } from "@/assets/assets";
 /** Kartu item di wishlist */
 function WishCard({ product, currency, onMoveToCart, onRemove }) {
   if (!product) return null;
+  const formattedPrice = `${currency}${Number(product.offerPrice ?? product.price ?? 0).toLocaleString("id-ID")}`;
   return (
     <div className="group rounded-2xl border border-zinc-200 bg-white p-3 md:p-4 shadow-sm hover:shadow transition">
       {/* Gambar */}
@@ -45,8 +46,7 @@ function WishCard({ product, currency, onMoveToCart, onRemove }) {
         {/* Harga + rating ringkas */}
         <div className="flex items-center justify-between pt-1">
           <div className="text-base font-semibold text-zinc-900">
-            {currency}
-            {product.offerPrice ?? product.price}
+            {formattedPrice}
           </div>
           <div className="flex items-center gap-1 text-xs text-zinc-600">
             <Image src={assets.star_icon} alt="" width={14} height={14} />
@@ -78,7 +78,7 @@ export default function WishlistPage() {
   const ctx = useAppContext();
   const {
     products = [],
-    currency = "$",
+    currency = "Rp",
     addToCart,
     router,
     // opsional dari AppContext (kalau ada):

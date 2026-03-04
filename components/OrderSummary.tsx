@@ -1,7 +1,19 @@
-// components/OrderSummary.jsx
-import { addressDummyData } from "@/assets/assets";
-import { useAppContext } from "@/context/AppContext";
-import React, { useEffect, useState } from "react";
+﻿import { useAppContext } from "@/context/AppContext";
+import React, { useEffect, useMemo, useState } from "react";
+
+type AddressItem = {
+  _id?: string;
+  label?: string;
+  receiver_name?: string;
+  phone?: string;
+  street?: string;
+  subdistrict?: string;
+  city?: string;
+  province?: string;
+  postal_code?: string;
+  country?: string;
+  is_default?: boolean;
+};
 
 export default function OrderSummary() {
   const {
@@ -9,81 +21,57 @@ export default function OrderSummary() {
     router,
     getCartCount,
     getCartAmount,
-    products = [],
-    cartItems = {},
+    userData,
   } = useAppContext();
 
-  const [selectedAddress, setSelectedAddress] = useState(null);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [userAddresses, setUserAddresses] = useState([]);
+
+  const addresses = useMemo(() => {
+    const list = Array.isArray(userData?.addresses) ? (userData?.addresses as AddressItem[]) : [];
+    return list;
+  }, [userData?.addresses]);
 
   useEffect(() => {
-    setUserAddresses(addressDummyData);
-  }, []);
-
-  const handleAddressSelect = (address) => {
-    setSelectedAddress(address);
-    setIsDropdownOpen(false);
-  };
-
-  const createOrder = () => {
-    if (!selectedAddress) {
-      alert("Pilih alamat terlebih dahulu.");
+    if (!addresses.length) {
+      setSelectedAddressId("");
       return;
     }
 
-    const items = Object.entries(cartItems)
-      .map(([id, qty]) => {
-        const p = products.find((x) => x._id === id);
-        if (!p || qty <= 0) return null;
-        const price = Number(p.offerPrice ?? p.price ?? 0);
-        return {
-          productId: id,
-          name: p.name,
-          image: p.image?.[0],
-          brand: p.brand ?? "Generic",
-          category: p.category ?? "Lainnya",
-          price,
-          qty,
-          subtotal: price * qty,
-        };
-      })
-      .filter(Boolean);
+    const defaultId = String(userData?.default_address_id || "");
+    const fallbackId = String(addresses.find((a) => a.is_default)?._id || addresses[0]?._id || "");
+    setSelectedAddressId(defaultId || fallbackId);
+  }, [addresses, userData?.default_address_id]);
 
-    if (items.length === 0) {
+  const selectedAddress = useMemo(
+    () => addresses.find((a) => String(a._id || "") === String(selectedAddressId || "")) || null,
+    [addresses, selectedAddressId],
+  );
+
+  const createOrder = () => {
+    if (getCartCount() <= 0) {
       router.push("/all-products");
       return;
     }
 
-    const subtotal = items.reduce((a, b) => a + b.subtotal, 0);
-    const shipping = 0;
-    const tax = Math.floor(subtotal * 0.02);
-    const total = subtotal + shipping + tax;
-
-    const draft = {
-      id: `tmp_${Date.now()}`,
-      items,
-      currency,
-      subtotal,
-      shipping,
-      tax,
-      total,
-      address: selectedAddress,
-      createdAt: new Date().toISOString(),
-    };
-
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("checkoutDraft", JSON.stringify(draft));
+    if (!selectedAddress?._id) {
+      alert("Tambahkan alamat pengiriman terlebih dahulu.");
+      router.push("/add-address");
+      return;
     }
-    router.push("/checkout");
+
+    router.push(`/checkout?addressId=${encodeURIComponent(String(selectedAddress._id))}`);
   };
+
+  const amount = getCartAmount();
+  const tax = Math.floor(amount * 0.02);
+  const total = amount + tax;
 
   return (
     <div className="w-full md:w-96 bg-gray-500/5 p-5">
       <h2 className="text-xl md:text-2xl font-medium text-gray-700">Ringkasan Pesanan</h2>
       <hr className="border-gray-500/30 my-5" />
 
-      {/* Alamat */}
       <div className="space-y-6">
         <div>
           <label className="text-base font-medium uppercase text-gray-600 block mb-2">
@@ -100,7 +88,7 @@ export default function OrderSummary() {
             >
               <span>
                 {selectedAddress
-                  ? `${selectedAddress.fullName}, ${selectedAddress.area}, ${selectedAddress.city}, ${selectedAddress.state}`
+                  ? `${selectedAddress.receiver_name}, ${selectedAddress.street}, ${selectedAddress.city}, ${selectedAddress.province}`
                   : "Pilih Alamat"}
               </span>
               <svg
@@ -118,24 +106,22 @@ export default function OrderSummary() {
             </button>
 
             {isDropdownOpen && (
-              <ul
-                className="absolute z-10 mt-1 w-full bg-white border shadow-md py-1.5"
-                role="listbox"
-              >
-                {userAddresses.map((address, index) => {
-                  const isSelected =
-                    selectedAddress &&
-                    selectedAddress.fullName === address.fullName &&
-                    selectedAddress.area === address.area;
+              <ul className="absolute z-10 mt-1 w-full bg-white border shadow-md py-1.5" role="listbox">
+                {addresses.map((address) => {
+                  const id = String(address._id || "");
+                  const isSelected = id === String(selectedAddressId || "");
                   return (
                     <li
-                      key={index}
+                      key={id}
                       role="option"
                       aria-selected={isSelected}
                       className="px-4 py-2 hover:bg-gray-500/10 cursor-pointer"
-                      onClick={() => handleAddressSelect(address)}
+                      onClick={() => {
+                        setSelectedAddressId(id);
+                        setIsDropdownOpen(false);
+                      }}
                     >
-                      {address.fullName}, {address.area}, {address.city}, {address.state}
+                      {address.receiver_name}, {address.street}, {address.city}, {address.province}
                     </li>
                   );
                 })}
@@ -150,21 +136,15 @@ export default function OrderSummary() {
           </div>
         </div>
 
-        {/* Promo */}
         <div>
-          <label className="text-base font-medium uppercase text-gray-600 block mb-2">
-            Kode Promo
-          </label>
+          <label className="text-base font-medium uppercase text-gray-600 block mb-2">Kode Promo</label>
           <div className="flex flex-col items-start gap-3">
             <input
               type="text"
               placeholder="Masukkan kode promo"
               className="flex-grow w-full outline-none p-2.5 text-gray-600 border"
             />
-            <button
-              type="button"
-              className="bg-orange-600 text-white px-9 py-2 hover:bg-orange-700"
-            >
+            <button type="button" className="bg-orange-600 text-white px-9 py-2 hover:bg-orange-700">
               Terapkan
             </button>
           </div>
@@ -172,31 +152,30 @@ export default function OrderSummary() {
 
         <hr className="border-gray-500/30 my-5" />
 
-        {/* Total */}
         <div className="space-y-4">
           <div className="flex justify-between text-base font-medium">
             <p className="uppercase text-gray-600">Item {getCartCount()}</p>
             <p className="text-gray-800">
               {currency}
-              {getCartAmount()}
+              {amount}
             </p>
           </div>
           <div className="flex justify-between">
             <p className="text-gray-600">Ongkos Kirim</p>
-            <p className="font-medium text-gray-800">Gratis</p>
+            <p className="font-medium text-gray-800">{currency}0</p>
           </div>
           <div className="flex justify-between">
             <p className="text-gray-600">Pajak (2%)</p>
             <p className="font-medium text-gray-800">
               {currency}
-              {Math.floor(getCartAmount() * 0.02)}
+              {tax}
             </p>
           </div>
           <div className="flex justify-between text-lg md:text-xl font-medium border-t pt-3">
             <p>Total</p>
             <p>
               {currency}
-              {getCartAmount() + Math.floor(getCartAmount() * 0.02)}
+              {total}
             </p>
           </div>
         </div>
@@ -207,7 +186,7 @@ export default function OrderSummary() {
         type="button"
         className="w-full bg-orange-600 text-white py-3 mt-5 hover:bg-orange-700"
       >
-        Buat Pesanan
+        Lanjut ke Checkout
       </button>
     </div>
   );

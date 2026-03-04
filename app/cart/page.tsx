@@ -12,11 +12,15 @@ const Cart = () => {
   const {
     products,
     router,
+    currency = "Rp",
     cartItems,
     addToCart,
     updateCartQuantity,
     getCartCount,
   } = useAppContext();
+
+  const formatMoney = (value: number | undefined) =>
+    `${currency}${Number(value || 0).toLocaleString("id-ID")}`;
 
   return (
     <>
@@ -94,7 +98,7 @@ const Cart = () => {
                       </td>
 
                       <td className="py-4 md:px-4 px-1 text-gray-600">
-                        ${product.offerPrice}
+                        {formatMoney(product.offerPrice)}
                       </td>
 
                       <td className="py-4 md:px-4 px-1">
@@ -151,8 +155,7 @@ const Cart = () => {
                       </td>
 
                       <td className="py-4 md:px-4 px-1 text-gray-600">
-                        $
-                        {(product.offerPrice * cartItems[itemId]).toFixed(2)}
+                        {formatMoney(Number(product.offerPrice || 0) * Number(cartItems[itemId] || 0))}
                       </td>
                     </tr>
                   );

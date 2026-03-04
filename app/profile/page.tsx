@@ -70,8 +70,25 @@ export default function ProfilePage() {
   const params = useSearchParams();
   const initialTab = params.get("tab") || "overview";
 
-  const { user, wishlist = [], orders = [], updateUser } = useAppContext() || {};
+  const { user, wishlist = [], orders = [], updateUser, products = [], currency = "Rp" } = useAppContext() || {};
   const [tab, setTab] = useState(initialTab);
+
+  const formatMoney = (value: number | undefined) =>
+    `${currency}${Number(value || 0).toLocaleString("id-ID")}`;
+
+  const wishlistItems = useMemo(() => {
+    if (!Array.isArray(wishlist)) return [];
+    const productMap = new Map(
+      (Array.isArray(products) ? products : []).map((p) => [String(p?._id), p])
+    );
+
+    return wishlist
+      .map((entry) => {
+        if (typeof entry === "string") return productMap.get(entry);
+        return entry;
+      })
+      .filter(Boolean);
+  }, [wishlist, products]);
 
   // Account form state (fallback kalau belum ada backend)
   const [form, setForm] = useState({
@@ -81,8 +98,27 @@ export default function ProfilePage() {
     gender: user?.gender || "",
     birthday: user?.birthday || "",
   });
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [accountMsg, setAccountMsg] = useState("");
+
+  const [securityForm, setSecurityForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [savingSecurity, setSavingSecurity] = useState(false);
+  const [securityMsg, setSecurityMsg] = useState("");
 
   useEffect(() => setTab(initialTab), [initialTab]);
+  useEffect(() => {
+    setForm({
+      fullName: user?.name || "",
+      email: user?.email || "",
+      phone: user?.phone || "",
+      gender: user?.gender || "",
+      birthday: user?.birthday || "",
+    });
+  }, [user?.name, user?.email, user?.phone, user?.gender, user?.birthday]);
 
   const changeTab = (k) => {
     setTab(k);
@@ -91,25 +127,85 @@ export default function ProfilePage() {
     router.replace(`/profile?${usp.toString()}`);
   };
 
-  const onSaveAccount = () => {
-    if (typeof updateUser === "function") {
-      updateUser(form);
-    } else {
-      console.log("Saved (mock):", form);
+  const onSaveAccount = async () => {
+    setSavingAccount(true);
+    setAccountMsg("");
+    try {
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.fullName,
+          email: form.email,
+          phone: form.phone,
+          gender: form.gender,
+          birthday: form.birthday,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Gagal menyimpan profil");
+
+      if (typeof updateUser === "function" && data?.user) {
+        updateUser(data.user);
+      }
+      setAccountMsg("Profil berhasil diperbarui.");
+    } catch (err: any) {
+      setAccountMsg(err?.message || "Gagal menyimpan profil.");
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  const onSavePassword = async () => {
+    if (!securityForm.currentPassword || !securityForm.newPassword) {
+      setSecurityMsg("Password saat ini dan password baru wajib diisi.");
+      return;
+    }
+    if (securityForm.newPassword.length < 8) {
+      setSecurityMsg("Password baru minimal 8 karakter.");
+      return;
+    }
+    if (securityForm.newPassword !== securityForm.confirmPassword) {
+      setSecurityMsg("Konfirmasi password tidak cocok.");
+      return;
+    }
+
+    setSavingSecurity(true);
+    setSecurityMsg("");
+    try {
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: securityForm.currentPassword,
+          newPassword: securityForm.newPassword,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Gagal mengubah password");
+
+      setSecurityMsg("Password berhasil diubah.");
+      setSecurityForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err: any) {
+      setSecurityMsg(err?.message || "Gagal mengubah password.");
+    } finally {
+      setSavingSecurity(false);
     }
   };
 
   /* --------- Derived stats --------- */
   const stats = useMemo(() => {
     const orderCount = Array.isArray(orders) ? orders.length : 0;
-    const wishCount = Array.isArray(wishlist) ? wishlist.length : 0;
+    const wishCount = wishlistItems.length;
     return [
       { label: "Orders", value: orderCount },
       { label: "Wishlist", value: wishCount },
       { label: "Vouchers", value: 0 },
       { label: "Points", value: 0 },
     ];
-  }, [orders, wishlist]);
+  }, [orders, wishlistItems]);
 
   /* --------- Renderers --------- */
 
@@ -191,7 +287,7 @@ export default function ProfilePage() {
                   <td className="py-3 pr-4 font-medium text-zinc-900">#{o.code || o.id || o._id}</td>
                   <td className="py-3 pr-4 text-zinc-700">{o.date || "-"}</td>
                   <td className="py-3 pr-4 text-zinc-700">{o.items?.length || 0}</td>
-                  <td className="py-3 pr-4 text-zinc-900">{o.total ? `$${o.total}` : "-"}</td>
+                  <td className="py-3 pr-4 text-zinc-900">{o.total ? formatMoney(Number(o.total)) : "-"}</td>
                   <td className="py-3 pr-4">
                     <span className="rounded-full bg-orange-50 text-orange-700 px-2 py-0.5 text-xs font-medium">
                       {o.status || "Processing"}
@@ -219,9 +315,9 @@ export default function ProfilePage() {
 
   const renderWishlist = () => (
     <Section title="Wishlist">
-      {Array.isArray(wishlist) && wishlist.length > 0 ? (
+      {wishlistItems.length > 0 ? (
         <ul className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {wishlist.map((p) => (
+          {wishlistItems.map((p) => (
             <li key={p._id} className="rounded-xl ring-1 ring-zinc-200 bg-white overflow-hidden">
               <Link href={`/product/${p._id}`} className="block group">
                 <div className="relative h-40 bg-zinc-50">
@@ -229,7 +325,7 @@ export default function ProfilePage() {
                 </div>
                 <div className="p-3">
                   <div className="text-sm font-medium text-zinc-900 truncate group-hover:underline">{p.name}</div>
-                  <div className="mt-1 text-sm text-zinc-700">${p.offerPrice ?? p.price}</div>
+                  <div className="mt-1 text-sm text-zinc-700">{formatMoney(Number(p.offerPrice ?? p.price ?? 0))}</div>
                 </div>
               </Link>
             </li>
@@ -260,7 +356,15 @@ export default function ProfilePage() {
   const renderAccount = () => (
     <Section
       title="Account Information"
-      right={<button onClick={onSaveAccount} className="rounded-lg bg-orange-600 text-white px-4 py-2 text-sm hover:bg-orange-700">Simpan</button>}
+      right={
+        <button
+          onClick={onSaveAccount}
+          disabled={savingAccount}
+          className="rounded-lg bg-orange-600 text-white px-4 py-2 text-sm hover:bg-orange-700 disabled:opacity-60"
+        >
+          {savingAccount ? "Menyimpan..." : "Simpan"}
+        </button>
+      }
     >
       <div className="flex items-center gap-4">
         <Image
@@ -317,6 +421,7 @@ export default function ProfilePage() {
           />
         </Field>
       </div>
+      {accountMsg && <p className="mt-3 text-sm text-zinc-700">{accountMsg}</p>}
     </Section>
   );
 
@@ -324,21 +429,41 @@ export default function ProfilePage() {
     <Section title="Security">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Password saat ini">
-          <input type="password" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <input
+            type="password"
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            value={securityForm.currentPassword}
+            onChange={(e) => setSecurityForm((s) => ({ ...s, currentPassword: e.target.value }))}
+          />
         </Field>
         <div />
         <Field label="Password baru">
-          <input type="password" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <input
+            type="password"
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            value={securityForm.newPassword}
+            onChange={(e) => setSecurityForm((s) => ({ ...s, newPassword: e.target.value }))}
+          />
         </Field>
         <Field label="Konfirmasi password baru">
-          <input type="password" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <input
+            type="password"
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            value={securityForm.confirmPassword}
+            onChange={(e) => setSecurityForm((s) => ({ ...s, confirmPassword: e.target.value }))}
+          />
         </Field>
       </div>
       <div className="mt-4">
-        <button className="rounded-lg bg-orange-600 text-white px-4 py-2 text-sm hover:bg-orange-700">
-          Ubah password
+        <button
+          onClick={onSavePassword}
+          disabled={savingSecurity}
+          className="rounded-lg bg-orange-600 text-white px-4 py-2 text-sm hover:bg-orange-700 disabled:opacity-60"
+        >
+          {savingSecurity ? "Menyimpan..." : "Ubah password"}
         </button>
       </div>
+      {securityMsg && <p className="mt-3 text-sm text-zinc-700">{securityMsg}</p>}
 
       <div className="mt-6 border-t pt-6">
         <h4 className="text-sm font-semibold text-zinc-900">Keamanan tambahan</h4>

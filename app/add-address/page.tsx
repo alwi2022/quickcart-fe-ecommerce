@@ -118,13 +118,45 @@ export default function AddAddress() {
     }
 
 
-    // tampilkan 3 alamat terbaru dari sessionStorage
     const [recent, setRecent] = useState<AddressBookItem[]>([]);
     useEffect(() => {
-        try {
-            const book = JSON.parse(sessionStorage.getItem("addressBook") || "[]") as AddressBookItem[];
-            setRecent(book.slice(0, 3));
-        } catch { }
+        let alive = true;
+        (async () => {
+            try {
+                const res = await fetch("/api/me", {
+                    method: "GET",
+                    cache: "no-store",
+                    credentials: "include",
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const addresses = Array.isArray(data?.user?.addresses) ? data.user.addresses : [];
+                const mapped: AddressBookItem[] = addresses.slice(0, 3).map((a: any) => ({
+                    id: String(a?._id || ""),
+                    label: a?.label || "Alamat",
+                    labelKey: "other",
+                    labelName: a?.label || "",
+                    fullName: a?.receiver_name || "",
+                    phoneNumber: a?.phone || "",
+                    province: a?.province || "",
+                    city: a?.city || "",
+                    district: a?.subdistrict || "",
+                    subdistrict: a?.subdistrict || "",
+                    postalCode: a?.postal_code || "",
+                    addressLine: a?.street || "",
+                    note: "",
+                    isDefault: Boolean(a?.is_default),
+                    lat: Number(a?.geo?.lat || 0) || null,
+                    lng: Number(a?.geo?.lng || 0) || null,
+                }));
+                if (alive) setRecent(mapped);
+            } catch {
+                // ignore
+            }
+        })();
+        return () => {
+            alive = false;
+        };
     }, []);
 
     function applySaved(a: AddressBookItem) {
@@ -160,34 +192,52 @@ export default function AddAddress() {
         return Object.keys(e).length === 0;
     };
 
-    const saveToSession = (mode = "use") => {
+    const saveToSession = async (mode = "use") => {
         const ok = validate();
         if (!ok) return;
 
-        const entry = {
-            id: `addr_${Date.now()}`,
-            label: displayLabel,
-            ...address,
-        };
-
-        // simpan ke buku alamat lokal
         try {
-            const book = JSON.parse(sessionStorage.getItem("addressBook") || "[]") as AddressBookItem[];
-            const nextBook = [entry, ...book];
-            sessionStorage.setItem("addressBook", JSON.stringify(nextBook));
-        } catch { }
+            const payload = {
+                address: {
+                    label: displayLabel,
+                    receiverName: address.fullName,
+                    phone: address.phoneNumber,
+                    street: address.addressLine,
+                    subdistrict: address.subdistrict,
+                    city: address.city,
+                    province: address.province,
+                    postalCode: address.postalCode,
+                    country: "ID",
+                    isDefault: address.isDefault,
+                    lat: address.lat,
+                    lng: address.lng,
+                },
+            };
 
-        // inject ke draft checkout kalau ada
-        try {
-            const draft = JSON.parse(sessionStorage.getItem("checkoutDraft") || "{}");
-            const next = { ...draft, address: entry };
-            sessionStorage.setItem("checkoutDraft", JSON.stringify(next));
-        } catch { }
+            const res = await fetch("/api/me", {
+                method: "PATCH",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data?.error || "Gagal menyimpan alamat");
+            }
 
-        if (mode === "use") {
-            router.push("/checkout?step=shipping");
-        } else {
-            router.back();
+            const addresses = Array.isArray(data?.user?.addresses) ? data.user.addresses : [];
+            const defaultId = String(data?.user?.default_address_id || "");
+            const latest = addresses[addresses.length - 1];
+            const targetId = defaultId || String(latest?._id || "");
+
+            if (mode === "use") {
+                const query = targetId ? `?addressId=${encodeURIComponent(targetId)}` : "";
+                router.push(`/checkout${query}`);
+            } else {
+                router.back();
+            }
+        } catch (err: any) {
+            alert(err?.message || "Gagal menyimpan alamat");
         }
     };
 

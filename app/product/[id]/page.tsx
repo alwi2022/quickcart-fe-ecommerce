@@ -10,9 +10,17 @@ import Loading from "@/components/Loading";
 import { useAppContext } from "@/context/AppContext";
 import { assets } from "@/assets/assets";
 
+type ReviewItem = {
+    _id?: string;
+    rating?: number;
+    content?: string;
+    createdAt?: string;
+    user?: { name?: string };
+};
+
 export default function Product() {
     const { id } = useParams();
-    const { products, router, addToCart } = useAppContext();
+    const { products, router, addToCart, user, authReady, currency = "Rp" } = useAppContext();
 
     const [mainImage, setMainImage] = useState(null);
     const [productData, setProductData] = useState(null);
@@ -21,6 +29,14 @@ export default function Product() {
 
 
     const [selectedVariant, setSelectedVariant] = useState(null);
+    const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+    const [reviewLoading, setReviewLoading] = useState(false);
+    const [reviewSubmitting, setReviewSubmitting] = useState(false);
+    const [reviewText, setReviewText] = useState("");
+    const [reviewRating, setReviewRating] = useState(5);
+    const [reviewMsg, setReviewMsg] = useState("");
+
+    const formatMoney = (value: number | undefined) => `${currency}${Number(value || 0).toLocaleString("id-ID")}`;
 
     const variantConfig = useMemo(() => {
         if (!productData) return { label: "Variant", options: [] };
@@ -67,7 +83,7 @@ export default function Product() {
         if (isCamera) {
             return {
                 label: "Lens Kit",
-                options: productData.kitOptions || ["Body Only", "18–55mm Kit", "18–135mm Kit"],
+                options: productData.kitOptions || ["Body Only", "", "With 18-55mm", "With 24-70mm"],
             };
         }
         if (isWatch) {
@@ -104,6 +120,36 @@ export default function Product() {
         setProductData(p || null);
     }, [id, products]);
 
+    useEffect(() => {
+        if (!id) return;
+        let alive = true;
+
+        (async () => {
+            try {
+                setReviewLoading(true);
+                const res = await fetch(`/api/reviews?productId=${encodeURIComponent(String(id))}&limit=20`, {
+                    method: "GET",
+                    cache: "no-store",
+                    credentials: "include",
+                });
+                if (!res.ok) throw new Error("Gagal memuat review");
+                const data = await res.json();
+                if (alive) {
+                    const rows = Array.isArray(data?.items) ? data.items : [];
+                    setReviewItems(rows);
+                }
+            } catch {
+                if (alive) setReviewItems([]);
+            } finally {
+                if (alive) setReviewLoading(false);
+            }
+        })();
+
+        return () => {
+            alive = false;
+        };
+    }, [id]);
+
     // fallback & computed fields
     const meta = useMemo(() => {
         if (!productData) return null;
@@ -127,13 +173,59 @@ export default function Product() {
 
     const handleAddToCart = () => {
         if (!productData) return;
-        // kompatibel jika context belum support qty: ulangi pemanggilan sebanyak qty
-        for (let i = 0; i < qty; i++) addToCart(productData._id);
+        void addToCart(productData._id, qty);
     };
 
     const handleBuyNow = () => {
         handleAddToCart();
         router.push("/cart");
+    };
+
+    const reviewSummary = useMemo(() => {
+        if (reviewItems.length === 0) return { avg: meta?.rating ?? 4.5, count: meta?.ratingCount ?? 1 };
+        const sum = reviewItems.reduce((acc, item) => acc + Number(item?.rating || 0), 0);
+        return {
+            avg: sum / reviewItems.length,
+            count: reviewItems.length,
+        };
+    }, [reviewItems, meta?.rating, meta?.ratingCount]);
+
+    const handleSubmitReview = async () => {
+        if (!user?._id) {
+            router.push(`/login?next=${encodeURIComponent(`/product/${id}`)}`);
+            return;
+        }
+        if (reviewText.trim().length < 3) {
+            setReviewMsg("Ulasan minimal 3 karakter.");
+            return;
+        }
+
+        setReviewSubmitting(true);
+        setReviewMsg("");
+        try {
+            const res = await fetch("/api/reviews", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    productId: String(id),
+                    rating: reviewRating,
+                    content: reviewText.trim(),
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || "Gagal mengirim ulasan");
+
+            const next = data?.item;
+            if (next) setReviewItems((prev) => [next, ...prev]);
+            setReviewText("");
+            setReviewRating(5);
+            setReviewMsg("Ulasan berhasil dikirim.");
+        } catch (err: any) {
+            setReviewMsg(err?.message || "Gagal mengirim ulasan.");
+        } finally {
+            setReviewSubmitting(false);
+        }
     };
 
     if (!productData || !meta) return <Loading />;
@@ -195,8 +287,8 @@ export default function Product() {
                                 <Image src={assets.star_dull_icon} alt="" className="h-4 w-4" />
                             </div>
                             <span>
-                                <strong>{meta.rating.toFixed(1)}</strong> Rating{" "}
-                                <span className="text-gray-500">({meta.ratingCount} user feedback)</span>
+                                <strong>{reviewSummary.avg.toFixed(1)}</strong> Rating{" "}
+                                <span className="text-gray-500">({reviewSummary.count} user feedback)</span>
                             </span>
                         </div>
 
@@ -231,9 +323,9 @@ export default function Product() {
 
                         {/* price */}
                         <div className="mt-5 flex items-end gap-4">
-                            <p className="text-3xl font-semibold text-gray-900">${meta.offer.toFixed(2)}</p>
+                            <p className="text-3xl font-semibold text-gray-900">{formatMoney(meta.offer)}</p>
                             {meta.price > meta.offer && (
-                                <p className="text-lg text-gray-500 line-through">${meta.price.toFixed(2)}</p>
+                                <p className="text-lg text-gray-500 line-through">{formatMoney(meta.price)}</p>
                             )}
                         </div>
 
@@ -272,7 +364,7 @@ export default function Product() {
                                     aria-label="Kurangi jumlah"
                                     type="button"
                                 >
-                                    –
+                                    -
                                 </button>
                                 <div className="h-12 w-16 flex items-center justify-center border-x border-gray-300">
                                     {qty}
@@ -344,11 +436,11 @@ export default function Product() {
                                     <tbody className="text-gray-700">
                                         <tr>
                                             <td className="py-2 pr-8 text-gray-500">Berat</td>
-                                            <td>{productData.weight ?? "—"}</td>
+                                            <td>{productData.weight ?? ""}</td>
                                         </tr>
                                         <tr>
                                             <td className="py-2 pr-8 text-gray-500">Dimensi</td>
-                                            <td>{productData.dimensions ?? "—"}</td>
+                                            <td>{productData.dimensions ?? ""}</td>
                                         </tr>
                                         <tr>
                                             <td className="py-2 pr-8 text-gray-500">Warna</td>
@@ -385,31 +477,52 @@ export default function Product() {
 
                         {activeTab === "review" && (
                             <div className="py-6">
-                                {/* Add review box */}
                                 <div className="border rounded p-4">
                                     <textarea
                                         placeholder="Tulis ulasan Anda di sini"
                                         className="w-full h-28 resize-none outline-none"
-                                        disabled
+                                        value={reviewText}
+                                        onChange={(e) => setReviewText(e.target.value)}
+                                        disabled={!user?._id || reviewSubmitting}
                                     />
                                     <div className="flex items-center gap-2 mt-2">
                                         <div className="flex items-center gap-1">
-                                            <Image src={assets.star_icon} alt="" className="h-5 w-5" />
-                                            <Image src={assets.star_icon} alt="" className="h-5 w-5" />
-                                            <Image src={assets.star_icon} alt="" className="h-5 w-5" />
-                                            <Image src={assets.star_icon} alt="" className="h-5 w-5" />
-                                            <Image src={assets.star_dull_icon} alt="" className="h-5 w-5" />
+                                            {Array.from({ length: 5 }).map((_, idx) => {
+                                                const val = idx + 1;
+                                                return (
+                                                    <button
+                                                        key={val}
+                                                        type="button"
+                                                        disabled={!user?._id || reviewSubmitting}
+                                                        onClick={() => setReviewRating(val)}
+                                                        className="disabled:opacity-60"
+                                                    >
+                                                        <Image
+                                                            src={val <= reviewRating ? assets.star_icon : assets.star_dull_icon}
+                                                            alt=""
+                                                            className="h-5 w-5"
+                                                        />
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                         <button
-                                            disabled
-                                            className="ml-auto inline-flex items-center gap-2 rounded bg-amber-700 px-4 py-2 text-white opacity-70"
+                                            disabled={reviewSubmitting}
+                                            onClick={handleSubmitReview}
+                                            className="ml-auto inline-flex items-center gap-2 rounded bg-amber-700 px-4 py-2 text-white disabled:opacity-60"
                                         >
-                                            LOGIN UNTUK MEMBERI KOMENTAR
+                                            {!authReady
+                                                ? "Memuat..."
+                                                : user?._id
+                                                    ? reviewSubmitting
+                                                        ? "MENGIRIM..."
+                                                        : "KIRIM ULASAN"
+                                                    : "LOGIN UNTUK MEMBERI KOMENTAR"}
                                         </button>
                                     </div>
+                                    {reviewMsg && <p className="mt-2 text-sm text-zinc-700">{reviewMsg}</p>}
                                 </div>
 
-                                {/* Average */}
                                 <div className="mt-6 text-sm text-gray-700">
                                     <div className="flex items-center gap-2">
                                         <div className="flex items-center gap-0.5">
@@ -419,50 +532,45 @@ export default function Product() {
                                             <Image src={assets.star_icon} alt="" className="h-4 w-4" />
                                             <Image src={assets.star_dull_icon} alt="" className="h-4 w-4" />
                                         </div>
-                                        <span className="font-semibold">{meta.rating.toFixed(1)}</span>
-                                        <span className="text-gray-500">({meta.ratingCount} ulasan)</span>
+                                        <span className="font-semibold">{reviewSummary.avg.toFixed(1)}</span>
+                                        <span className="text-gray-500">({reviewSummary.count} ulasan)</span>
                                     </div>
                                 </div>
 
-                                {/* Reviews list (mock / from data if ada) */}
                                 <div className="mt-4 space-y-4">
-                                    {(productData.reviews || [
-                                        {
-                                            user: "sylvaincodes sylvain",
-                                            rating: 5,
-                                            text: "handphone bagus",
-                                            by: "Orion",
-                                            date: "Tue Dec 24 2024",
-                                            avatar: assets.user_icon || assets.profile_icon || assets.logo,
-                                        },
-                                    ]).map((r, i) => (
-                                        <div key={i} className="border-t pt-4">
+                                    {reviewLoading && (
+                                        <p className="text-sm text-zinc-600">Memuat ulasan...</p>
+                                    )}
+                                    {!reviewLoading && reviewItems.length === 0 && (
+                                        <p className="text-sm text-zinc-600">Belum ada ulasan.</p>
+                                    )}
+                                    {!reviewLoading && reviewItems.map((r, idx) => (
+                                        <div key={String(r._id || idx)} className="border-t pt-4">
                                             <div className="flex items-center gap-3">
                                                 <Image
-                                                    src={r.avatar}
-                                                    alt={r.user}
+                                                    src={assets.user_icon || assets.profile_icon || assets.logo}
+                                                    alt={r.user?.name || "User"}
                                                     width={36}
                                                     height={36}
                                                     className="h-9 w-9 rounded-full object-cover"
                                                 />
-                                                <div className="font-medium text-gray-800">{r.user}</div>
+                                                <div className="font-medium text-gray-800">{r.user?.name || "User"}</div>
                                             </div>
                                             <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
                                                 <div className="flex items-center gap-0.5">
                                                     {Array.from({ length: 5 }).map((_, idx) => (
                                                         <Image
                                                             key={idx}
-                                                            src={idx < (r.rating ?? 5) ? assets.star_icon : assets.star_dull_icon}
+                                                            src={idx < Number(r.rating || 0) ? assets.star_icon : assets.star_dull_icon}
                                                             alt=""
                                                             className="h-4 w-4"
                                                         />
                                                     ))}
                                                 </div>
-                                                <span>{r.text}</span>
+                                                <span>{r.content}</span>
                                             </div>
                                             <div className="mt-2 text-xs text-gray-500">
-                                                Ulasan oleh <span className="font-medium">{r.by}</span> • Dikirim pada{" "}
-                                                {r.date}
+                                                Dikirim pada {r.createdAt ? new Date(r.createdAt).toLocaleDateString("id-ID") : "-"}
                                             </div>
                                         </div>
                                     ))}

@@ -18,7 +18,15 @@ type ProductCardProps = {
 };
 
 const ProductCard = ({ product, isLcp = false }: ProductCardProps) => {
-  const { currency, router } = useAppContext();
+  const { currency, router, wishlist = [], toggleWishlist } = useAppContext();
+  const isWished = Array.isArray(wishlist)
+    ? wishlist.some((entry) => {
+        if (typeof entry === "string") return entry === product._id;
+        return String(entry?._id ?? entry?.id ?? "") === String(product._id);
+      })
+    : false;
+
+     const formatMoney = (value: number | undefined) => `${currency}${Number(value || 0).toLocaleString("id-ID")}`;
 
   return (
     <div
@@ -40,10 +48,15 @@ const ProductCard = ({ product, isLcp = false }: ProductCardProps) => {
           sizes="(max-width: 768px) 45vw, (max-width: 1024px) 25vw, 200px"
         />
         <button
-          className="absolute top-2 right-2 bg-white p-2 rounded-full shadow-md"
+          className={`absolute top-2 right-2 rounded-full p-2 shadow-md transition ${
+            isWished ? "bg-orange-50 ring-1 ring-orange-200" : "bg-white"
+          }`}
           aria-label="Tambah ke favorit"
           type="button"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (typeof toggleWishlist === "function") toggleWishlist(product);
+          }}
         >
           <Image
             className="h-3 w-3"
@@ -80,8 +93,7 @@ const ProductCard = ({ product, isLcp = false }: ProductCardProps) => {
 
       <div className="flex items-end justify-between w-full mt-1">
         <p className="text-base font-medium">
-          {currency}
-          {product.offerPrice}
+          {formatMoney(product.offerPrice)}
         </p>
         <button
           className="max-sm:hidden px-4 py-1.5 text-gray-500 border border-gray-500/20 rounded-full text-xs hover:bg-slate-50 transition"
